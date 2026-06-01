@@ -1,0 +1,302 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                 String               @id @default(uuid())
+  email              String               @unique
+  password           String
+  role               String               @default("STUDENT") // STUDENT, ALUMNI, LECTURER, STAFF, CLUB_ADMIN, GONDAR_COMMUNITY, MODERATOR, SUPER_ADMIN
+  isVerified         Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  profile            Profile?
+  posts              Post[]
+  comments           Comment[]
+  commentReplies     CommentReply[]
+  reactions          Reaction[]
+  sentFollows        Follow[]             @relation("SentFollows")
+  receivedFollows    Follow[]             @relation("ReceivedFollows")
+  notifications      Notification[]       @relation("UserNotifications")
+  senderNotifications Notification[]      @relation("SenderNotifications")
+  sentMessages       Message[]
+  conversationMembers ConversationMember[]
+  groupMembers       GroupMember[]
+  eventRegistrations EventRegistration[]
+  reportsMade        Report[]             @relation("Reporter")
+  reportsReceived    Report[]             @relation("ReportedUser")
+  moderationLogs     ModerationLog[]
+  auditLogs          AuditLog[]
+  bookmarks          Bookmark[]
+}
+
+model Profile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName        String
+  department      String?
+  college         String?
+  graduationYear  Int?
+  bio             String?
+  skills          String?  // Comma separated list of skills
+  interests       String?  // Comma separated list of interests
+  contactInfo     String?
+  privacySettings String   @default("PUBLIC") // PUBLIC, CONNECTIONS_ONLY, PRIVATE
+  avatarUrl       String?
+  coverUrl        String?
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  follower    User     @relation("SentFollows", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("ReceivedFollows", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+}
+
+model Post {
+  id               String        @id @default(uuid())
+  authorId         String
+  author           User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content          String
+  visibility       String        @default("PUBLIC") // PUBLIC, CONNECTIONS_ONLY, PRIVATE
+  repostOfId       String?
+  repostOf         Post?         @relation("Reposts", fields: [repostOfId], references: [id], onDelete: SetNull)
+  reposts          Post[]        @relation("Reposts")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  media            PostMedia[]
+  comments         Comment[]
+  reactions        Reaction[]
+  bookmarks        Bookmark[]
+  reports          Report[]
+  hashtags         PostHashtag[]
+}
+
+model PostMedia {
+  id     String @id @default(uuid())
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  url    String
+  type   String @default("IMAGE") // IMAGE, VIDEO, FILE
+}
+
+model Comment {
+  id        String         @id @default(uuid())
+  postId    String
+  post      Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  replies   CommentReply[]
+  reactions Reaction[]
+  reports   Report[]
+}
+
+model CommentReply {
+  id        String   @id @default(uuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String?
+  post      Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  commentId String?
+  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  type      String   // LIKE, LOVE, CELEBRATE, SUPPORT, INSIGHTFUL, FUNNY
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId, commentId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   // Recipient
+  user      User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  senderId  String?  // Triggerer
+  sender    User?    @relation("SenderNotifications", fields: [senderId], references: [id], onDelete: SetNull)
+  type      String   // FOLLOW, COMMENT, REPLY, REACTION, MESSAGE, ANNOUNCEMENT, SYSTEM
+  message   String
+  entityId  String?  // e.g. postId, msgId
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Conversation {
+  id        String               @id @default(uuid())
+  name      String?              // Group name, null for 1-1
+  isGroup   Boolean              @default(false)
+  createdAt DateTime             @default(now())
+  messages  Message[]
+  members   ConversationMember[]
+}
+
+model ConversationMember {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt       DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  mediaUrl       String?
+  mediaType      String?      // IMAGE, VIDEO, FILE
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+}
+
+model Group {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  type        String        @default("CLUB") // CLUB, DEPARTMENT, FACULTY, ALUMNI_GROUP, STUDENT_ORG
+  coverUrl    String?
+  avatarUrl   String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  members     GroupMember[]
+}
+
+model GroupMember {
+  id       String   @id @default(uuid())
+  groupId  String
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String   @default("MEMBER") // ADMIN, MEMBER
+  joinedAt DateTime @default(now())
+
+  @@unique([groupId, userId])
+}
+
+model Event {
+  id          String              @id @default(uuid())
+  title       String
+  description String
+  location    String
+  startDate   DateTime
+  endDate     DateTime
+  coverUrl    String?
+  organId     String
+  creatorRole String              @default("STUDENT")
+  createdAt   DateTime            @default(now())
+  registrations EventRegistration[]
+}
+
+model EventRegistration {
+  id           String   @id @default(uuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rsvp         String   @default("YES") // YES, MAYBE, NO
+  registeredAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  priority  String   @default("NORMAL") // NORMAL, HIGH, URGENT
+  isPinned  Boolean  @default(false)
+  scope     String   @default("GENERAL") // GENERAL, DEPARTMENT, CLUB, FACULTY
+  scopeId   String?
+  createdBy String
+  createdAt DateTime @default(now())
+}
+
+model Hashtag {
+  name  String        @id
+  posts PostHashtag[]
+}
+
+model PostHashtag {
+  postId      String
+  post        Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  hashtagName String
+  hashtag     Hashtag @relation(fields: [hashtagName], references: [name], onDelete: Cascade)
+
+  @@id([postId, hashtagName])
+}
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+}
+
+model Report {
+  id             String   @id @default(uuid())
+  reporterId     String
+  reporter       User     @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUserId String?
+  reportedUser   User?    @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  postId         String?
+  post           Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  commentId      String?
+  comment        Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  targetType     String   // POST, COMMENT, USER
+  targetId       String
+  reason         String
+  description    String?
+  status         String   @default("PENDING") // PENDING, RESOLVED, DISMISSED
+  createdAt      DateTime @default(now())
+}
+
+model ModerationLog {
+  id          String   @id @default(uuid())
+  moderatorId String
+  moderator   User     @relation(fields: [moderatorId], references: [id], onDelete: Cascade)
+  action      String   // SUSPEND, BAN, WARN, DELETE_POST, DELETE_COMMENT, RESOLVE_REPORT
+  targetId    String
+  targetType  String
+  reason      String
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action      String   // LOGIN, LOGOUT, UPDATE_PROFILE, CHANGE_ROLE, SYSTEM_SETTING
+  description String
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}
