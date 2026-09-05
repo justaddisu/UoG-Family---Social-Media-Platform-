@@ -117,7 +117,7 @@ export default function Landing() {
           <div>
             <h4 className="text-base font-bold text-white">Trust, Safety & Academic Integrity</h4>
             <p className="text-xs text-slate-400 mt-1">
-              Protected by JWT authentication, secure SQLite data tables, role restrictions, and automated AI Content Moderation.
+              Protected by JWT authentication, secure SQLite data tables, role restrictions, and automated content moderation.
             </p>
           </div>
         </div>

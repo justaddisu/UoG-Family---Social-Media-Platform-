@@ -2,5 +2,5 @@
   "name": "UoG Family",
   "description": "University of Gondar Social Platform - A comprehensive digital hub for connecting students, faculty, alumni, and staff.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

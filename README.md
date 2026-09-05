@@ -57,7 +57,7 @@ cp .env.example .env
 ```
 
 Required variables:
-- `GEMINI_API_KEY` — optional Gemini key for AI moderation
+- `PRODUCT_KEY` — optional runtime product key for secured features
 - `APP_URL` — application base URL, e.g. `http://localhost:3000`
 - `DATABASE_URL` — PostgreSQL connection string
 - `JWT_SECRET` — JWT authentication secret
@@ -104,6 +104,7 @@ A smoke-test script is available at `test-api.js` to verify endpoints and authen
 - The app is currently configured for local development and PostgreSQL.
 - The footer on the landing page includes developer credits and social links for Addisu Dessalegn.
 - If you want to deploy this project, update `APP_URL`, configure production database credentials, and secure all secrets.
+- Original work and implementation by Addisu Dessalegn.
 
 ## License
 

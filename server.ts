@@ -8,10 +8,9 @@ import { Server as SocketServer } from "socket.io";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
-const GEMINI_PLACEHOLDER_KEY = "MY_GEMINI_API_KEY";
+const PRODUCT_KEY_PLACEHOLDER = "MY_PRODUCT_KEY";
 
 const prisma = new PrismaClient();
 const app = express();
@@ -41,13 +40,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Lazy-loaded Gemini AI client for UoG Family Content Moderation
-// Optional feature: if configured, helps moderate user posts for harmful content
-let geminiClient: GoogleGenAI | null = null;
-
-function hasConfiguredGeminiKey(): boolean {
-  const key = process.env.GEMINI_API_KEY?.trim();
-  return Boolean(key && key !== GEMINI_PLACEHOLDER_KEY);
+function hasConfiguredProductKey(): boolean {
+  const key = process.env.PRODUCT_KEY?.trim();
+  return Boolean(key && key !== PRODUCT_KEY_PLACEHOLDER);
 }
 
 async function promptHiddenInput(promptText: string): Promise<string> {
@@ -103,38 +98,24 @@ async function promptHiddenInput(promptText: string): Promise<string> {
   });
 }
 
-async function ensureGeminiProductKey(): Promise<void> {
-  if (hasConfiguredGeminiKey()) {
+async function ensureProductKey(): Promise<void> {
+  if (hasConfiguredProductKey()) {
     return;
   }
 
   if (process.env.NODE_ENV === "production" || !process.stdin.isTTY) {
-    console.warn("UoG Family: GEMINI_API_KEY is missing. AI moderation will stay disabled.");
+    console.warn("UoG Family: PRODUCT_KEY is missing. Optional key-based features will stay disabled.");
     return;
   }
 
-  const providedKey = await promptHiddenInput("Enter Gemini product key (input hidden, press Enter to skip): ");
+  const providedKey = await promptHiddenInput("Enter product key (input hidden, press Enter to skip): ");
 
   if (providedKey) {
-    process.env.GEMINI_API_KEY = providedKey;
-    console.log("UoG Family: Gemini product key loaded for this runtime session.");
+    process.env.PRODUCT_KEY = providedKey;
+    console.log("UoG Family: Product key loaded for this runtime session.");
   } else {
-    console.warn("UoG Family: No Gemini product key entered. AI moderation will stay disabled.");
+    console.warn("UoG Family: No product key entered. Optional key-based features will stay disabled.");
   }
-}
-
-function getGeminiClient(): GoogleGenAI | null {
-  if (!geminiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (key && key !== GEMINI_PLACEHOLDER_KEY) {
-      try {
-        geminiClient = new GoogleGenAI({ apiKey: key });
-      } catch (e) {
-        console.warn("UoG Family: Could not initialize AI content moderation.", e);
-      }
-    }
-  }
-  return geminiClient;
 }
 
 // REST Middlewares
@@ -189,7 +170,7 @@ async function seedDatabaseIfEmpty() {
       fullName: "Dr. Aster Kassa",
       department: "Computer Science",
       college: "College of Informatics",
-      bio: "Lecturer and AI research lead. Enthusiastic about introducing Ethiopian language models to the world.",
+      bio: "Lecturer and research lead. Enthusiastic about introducing Ethiopian language technologies to the world.",
       avatarUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150"
     },
     {
@@ -330,7 +311,7 @@ async function seedDatabaseIfEmpty() {
   const eventHack = await prisma.event.create({
     data: {
       title: "Gondar annual Hackathon 2026",
-      description: "Join us for a 48-hour sprint of coding, design brainstorms, and AI integrations. Build local solutions for digital payments, agronomy, health delivery, and student productivity in Gondar.",
+      description: "Join us for a 48-hour sprint of coding and design brainstorms. Build local solutions for digital payments, agronomy, health delivery, and student productivity in Gondar.",
       location: "Informatics Labs, Maraki Campus",
       startDate: new Date("2026-06-15T09:00:00Z"),
       endDate: new Date("2026-06-17T18:00:00Z"),
@@ -811,27 +792,6 @@ app.post("/api/posts", authenticateToken, async (req: any, res: any) => {
 
     if (!content || content.trim() === "") {
       return res.status(400).json({ error: "Post content cannot be empty." });
-    }
-
-    // AI Content Filtration if Gemini is configured!
-    const gemini = getGeminiClient();
-    if (gemini) {
-      try {
-        const prompt = `Analyze this university social network post. If there is strong hate speech, extreme toxicity, academic cheating assistance, or explicit verbal abuse, respond with ONLY the word "FLAGGED: <reason>". Otherwise, respond with the exact word "SAFE". Content: "${content}"`;
-        const response = await gemini.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-        });
-        const auditText = response.text?.trim() || "";
-        if (auditText.startsWith("FLAGGED")) {
-          // Log a reported event and prevent creation or warning
-          return res.status(400).json({
-            error: "Our automated systems have flagged this post. Policy violation: content violates Gondar University ethics standards."
-          });
-        }
-      } catch (gem_err) {
-        console.error("Gemini AI content filtration failed:", gem_err);
-      }
     }
 
     // Create the Post
@@ -2032,7 +1992,7 @@ io.on("connection", (socket) => {
 
 // STARTUP VITE INTEGRATIONS & STATIC FILES HANDLERS
 async function startFullStackServer() {
-  await ensureGeminiProductKey();
+  await ensureProductKey();
 
   // Sync core database data
   await seedDatabaseIfEmpty();
