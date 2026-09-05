@@ -11,6 +11,8 @@ import jwt from "jsonwebtoken";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
+const GEMINI_PLACEHOLDER_KEY = "MY_GEMINI_API_KEY";
+
 const prisma = new PrismaClient();
 const app = express();
 const server = http.createServer(app);
@@ -42,10 +44,89 @@ app.use((req, res, next) => {
 // Lazy-loaded Gemini AI client for UoG Family Content Moderation
 // Optional feature: if configured, helps moderate user posts for harmful content
 let geminiClient: GoogleGenAI | null = null;
+
+function hasConfiguredGeminiKey(): boolean {
+  const key = process.env.GEMINI_API_KEY?.trim();
+  return Boolean(key && key !== GEMINI_PLACEHOLDER_KEY);
+}
+
+async function promptHiddenInput(promptText: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const stdin = process.stdin;
+    const stdout = process.stdout;
+
+    if (!stdin.isTTY || !stdout.isTTY) {
+      resolve("");
+      return;
+    }
+
+    let value = "";
+    stdout.write(promptText);
+    stdin.resume();
+    stdin.setEncoding("utf8");
+    stdin.setRawMode?.(true);
+
+    const cleanup = () => {
+      stdin.setRawMode?.(false);
+      stdin.pause();
+      stdin.removeListener("data", onData);
+    };
+
+    const onData = (chunk: string) => {
+      const char = String(chunk);
+
+      if (char === "\u0003") {
+        cleanup();
+        stdout.write("\n");
+        reject(new Error("Input cancelled by user."));
+        return;
+      }
+
+      if (char === "\r" || char === "\n") {
+        cleanup();
+        stdout.write("\n");
+        resolve(value.trim());
+        return;
+      }
+
+      if (char === "\u0008" || char === "\u007f") {
+        value = value.slice(0, -1);
+        return;
+      }
+
+      if (char >= " ") {
+        value += char;
+      }
+    };
+
+    stdin.on("data", onData);
+  });
+}
+
+async function ensureGeminiProductKey(): Promise<void> {
+  if (hasConfiguredGeminiKey()) {
+    return;
+  }
+
+  if (process.env.NODE_ENV === "production" || !process.stdin.isTTY) {
+    console.warn("UoG Family: GEMINI_API_KEY is missing. AI moderation will stay disabled.");
+    return;
+  }
+
+  const providedKey = await promptHiddenInput("Enter Gemini product key (input hidden, press Enter to skip): ");
+
+  if (providedKey) {
+    process.env.GEMINI_API_KEY = providedKey;
+    console.log("UoG Family: Gemini product key loaded for this runtime session.");
+  } else {
+    console.warn("UoG Family: No Gemini product key entered. AI moderation will stay disabled.");
+  }
+}
+
 function getGeminiClient(): GoogleGenAI | null {
   if (!geminiClient) {
     const key = process.env.GEMINI_API_KEY;
-    if (key && key !== "MY_GEMINI_API_KEY") {
+    if (key && key !== GEMINI_PLACEHOLDER_KEY) {
       try {
         geminiClient = new GoogleGenAI({ apiKey: key });
       } catch (e) {
@@ -1951,6 +2032,8 @@ io.on("connection", (socket) => {
 
 // STARTUP VITE INTEGRATIONS & STATIC FILES HANDLERS
 async function startFullStackServer() {
+  await ensureGeminiProductKey();
+
   // Sync core database data
   await seedDatabaseIfEmpty();
 
